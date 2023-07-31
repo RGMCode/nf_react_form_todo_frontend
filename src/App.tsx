@@ -1,127 +1,149 @@
-import './App.css'
+import { useEffect, useState } from "react";
 import axios from "axios";
-import {useEffect, useState} from "react";
 
-type Todos = {
-    id: string,
-    description: string,
-    status: string
-}
+type Todo = {
+    id: string;
+    description: string;
+    status: string;
+};
 
-type Status = {
-    status: string
-}
+type TodoCardProps = {
+    todo: Todo;
+    setTodos: (todos: Todo[]) => void;
+    todos: Todo[];
+};
 
-function FindAll({ status }: Status) {
-    const [descriptions, setDescription] = useState<undefined | Todos[]>(undefined);
-    useEffect(() => {
-        axios({
-            method: 'get',
-            url: 'api/todo',
-        })
-            .then(function (response) {
-                console.log("GET / READ");
-                console.log("Response status: ", response.status);
-                console.log("Response data: ", response.data);
-                setDescription(response.data.filter((todo: Todos) => todo.status === status));
-            })
-            .catch(function (error) {
-                console.error("Fehler beim Abrufen der Daten:", error);
-            });
-    }, []);
-    console.log("descriptions: ", descriptions);
-    return (
-        descriptions === undefined || descriptions.length === 0 ? <div>Loading . . .</div> : (
-            <ul className="todos-liste">
-                {descriptions.map(desc =>
-                    <li key={desc.id} className="single-task">
-                        <h2>Description: <br/>{desc.description}</h2>
-                        <h3 className={"status-text"}>Status: {desc.status}</h3>
-                        <button className={"btnNext"} onClick={() => StatusUpdate(desc.id, desc.status)}>next</button>
-
-                    </li>
-                )}
-            </ul>
-        )
-    );
-}
-
-function StatusUpdate(id: string, currentStatus: string) {
-    const updatedStatus = currentStatus === "OPEN" ? "IN_PROGRESS" : "DONE";
-    axios({
-        method: 'put',
-        url: `/api/todo/${id}`,
-        data: {
-            id: id,
-            status: updatedStatus
-        }
-    }).then(function (response) {
-        console.log("PUT / UPDATE");
-        console.log("Response status: ", response.status);
-        console.log("Response data: ", response.data);
-        // Hier könntest du die Todos neu abrufen, um die Änderungen im Frontend zu reflektieren
-    });
-}
-
-
-function AddTodo() {
-    const [description, setDescription] = useState("")
-    const isNotEmpty  = description ==="" ? true : false;
-
-    function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-        event.preventDefault();
-
-        axios({
-            method: 'post',
-            url: '/api/todo',
-            data: {
-                id: "1",
-                description: description,
-                status: "OPEN"
-            }
-        }).then(function (response) {
-            console.log("POST / CREATE")
-            console.log("Response Status: ", response.status);
-            console.log("Response Data: ", response.data)
-        })
-
-        setDescription("");
-    }
+function TodoCard(props: TodoCardProps) {
+    const todo = props.todo;
+    const setTodos = props.setTodos;
+    const todos = props.todos;
 
     return (
-        <div>
-            <form onSubmit={handleSubmit}>
-                <input className={"inputField"} type={"text"} value={description} onChange={event => setDescription(event.target.value)}/>
-                <button disabled={isNotEmpty}>Submit</button>
-            </form>
-        </div>
+        <li>
+            Description: {todo.description}
+            <br />
+            Status: {todo.status}
+            <br />
+            {todo.status !== "DONE" ? (
+                <button
+                    onClick={() => {
+                        let status = todo.status;
+
+                        if (status === "OPEN") {
+                            status = "IN_PROGRESS";
+                        } else if (status === "IN_PROGRESS") {
+                            status = "DONE";
+                        }
+
+                        axios({
+                            url: "/api/todo/" + todo.id,
+                            method: "put",
+                            data: {
+                                id: todo.id,
+                                description: todo.description,
+                                status: status,
+                            },
+                        });
+
+                        setTodos(
+                            todos.map((t) =>
+                                t.id === todo.id
+                                    ? {
+                                        id: todo.id,
+                                        description: todo.description,
+                                        status: status,
+                                    }
+                                    : t
+                            )
+                        );
+                    }}
+                >
+                    NEXT
+                </button>
+            ) : null}
+            {todo.status === "DONE" ? (
+                <button
+                    onClick={() => {
+                        axios({
+                            url: "/api/todo/" + todo.id,
+                            method: "delete",
+                        });
+
+                        setTodos(todos.filter((t) => t.id !== todo.id));
+                    }}
+                >
+                    DELETE
+                </button>
+            ) : null}
+        </li>
     );
 }
 
 function App() {
+    const [todos, setTodos] = useState<undefined | Todo[]>();
+    const [input, setInput] = useState("")
+
+    function handleOnChange(event) {
+        setInput(event.target.value)
+    }
+
+    function handleOnSubmit(event) {
+        event.preventDefault()
+        axios({
+            url: "/api/todo",
+            method: "post",
+            data: {
+                "description": input,
+                "status" : "OPEN"
+            }
+        }).then( response => {
+            axios({
+                url: "/api/todo",
+                method: "get"
+            }).then(response => {
+                setTodos(response.data)
+                setInput("")
+            })
+        })
+    }
+
+    useEffect(() => {
+        axios({
+            url: "/api/todo",
+            method: "get",
+        }).then(function (response) {
+            setTodos(response.data);
+        }).catch(console.log);
+    }, []);
+
     return (
         <div>
-            <div className={"flex-container"}>
-                <div className={"addTodo"}>
-                    <AddTodo/>
-                </div>
-                <div className={"item"}>
-                    <h1>Offen</h1>
-                    <FindAll status="OPEN"/>
-                </div>
-                <hr/>
-                <div className={"item"}>
-                    <h1>In progress</h1>
-                    <FindAll status="IN_PROGRESS"/>
-                </div>
-                <hr/>
-                <div className={"item"}>
-                    <h1>Done</h1>
-                    <FindAll status="DONE"/>
-                </div>
-            </div>
+            <h1>Todos:</h1>
+            <form onSubmit={handleOnSubmit}>
+                <label>Add new Todo</label>
+                <input type={"text"} value={input} onChange={handleOnChange}/>
+                <button>Submit Todo</button>
+            </form>
+            {todos === undefined ? (
+                <p>Loading...</p>
+            ) : todos.length === 0 ? (
+                <p>No todos!</p>
+            ) : (
+                <ul>
+                    {todos.map((todo) => (
+                        <TodoCard
+                            key={todo.id}
+                            todo={todo}
+                            setTodos={(todos: Todo[]) => setTodos(todos)}
+                            todos={todos}
+                        />
+                    ))}
+                </ul>
+            )}
+
+
         </div>
-    )
+    );
 }
 
-export default App
+export default App;
